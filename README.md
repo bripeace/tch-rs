@@ -16,10 +16,19 @@ The code generation part for the C api on top of libtorch comes from
 
 ## Getting Started
 
-This crate requires the C++ PyTorch library (libtorch) in version *v1.8.0* to be available on
-your system. You can either install it manually and let the build script know about
-it via the `LIBTORCH` environment variable. If not set, the build script will
-try downloading and extracting a pre-built binary version of libtorch.
+This crate requires the C++ PyTorch library (libtorch) in version *v1.11.0* to be available on
+your system. You can either:
+
+- Use the system-wide libtorch installation (default).
+- Install libtorch manually and let the build script know about it via the `LIBTORCH` environment variable.
+- When a system-wide libtorch can't be found and `LIBTORCH` is not set, the build script will download a pre-built binary version
+of libtorch. By default a CPU version is used. The `TORCH_CUDA_VERSION` environment variable
+can be set to `cu113` in order to get a pre-built binary using CUDA 11.3.
+
+### System-wide Libtorch
+
+The build script will look for a system-wide libtorch library in the following locations:
+- In Linux: `/usr/lib/libtorch.so`
 
 ### Libtorch Manual Install
 
@@ -56,7 +65,6 @@ This crate provides a tensor type which wraps PyTorch tensors. Here is a minimal
 example of how to perform some tensor operations.
 
 ```rust
-extern crate tch;
 use tch::Tensor;
 
 fn main() {
@@ -86,9 +94,8 @@ Then on each step of the training loop:
 
 
 ```rust
-extern crate tch;
-use tch::nn;
-use tch::Tensor;
+use tch::nn::{Module, OptimizerConfig};
+use tch::{kind, nn, Device, Tensor};
 
 fn my_module(p: nn::Path, dim: i64) -> impl nn::Module {
     let x1 = p.zeros("x1", &[dim]);
@@ -99,12 +106,12 @@ fn my_module(p: nn::Path, dim: i64) -> impl nn::Module {
 fn gradient_descent() {
     let vs = nn::VarStore::new(Device::Cpu);
     let my_module = my_module(vs.root(), 7);
-    let opt = nn::Sgd::default().build(&vs, 1e-2).unwrap();
+    let mut opt = nn::Sgd::default().build(&vs, 1e-2).unwrap();
     for _idx in 1..50 {
         // Dummy mini-batches made of zeros.
         let xs = Tensor::zeros(&[7], kind::FLOAT_CPU);
         let ys = Tensor::zeros(&[7], kind::FLOAT_CPU);
-        let loss = (my_module.forward(&xs) - ys).pow(2).sum();
+        let loss = (my_module.forward(&xs) - ys).pow_tensor_scalar(2).sum(kind::Kind::Float);
         opt.backward_step(&loss);
     }
 }
@@ -116,8 +123,6 @@ The `nn` api can be used to create neural network architectures, e.g. the follow
 a simple model with one hidden layer and trains it on the MNIST dataset using the Adam optimizer.
 
 ```rust
-extern crate anyhow;
-extern crate tch;
 use anyhow::Result;
 use tch::{nn, nn::Module, nn::OptimizerConfig, Device};
 
@@ -169,8 +174,8 @@ More details on the training loop can be found in the
 The [pretrained-models  example](https://github.com/LaurentMazare/tch-rs/tree/master/examples/pretrained-models/main.rs)
 illustrates how to use some pre-trained computer vision model on an image.
 The weights - which have been extracted from the PyTorch implementation - can be
-downloaded here [resnet18.ot](https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/resnet18.ot)
-and here [resnet34.ot](https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/resnet34.ot).
+downloaded here [resnet18.ot](https://github.com/LaurentMazare/tch-rs/releases/download/mw/resnet18.ot)
+and here [resnet34.ot](https://github.com/LaurentMazare/tch-rs/releases/download/mw/resnet34.ot).
 
 The example can then be run via the following command:
 ```bash
@@ -208,7 +213,7 @@ Further examples include:
   illustrating character level language modeling using Recurrent Neural Networks.
 * [Neural style transfer](https://github.com/LaurentMazare/tch-rs/blob/master/examples/neural-style-transfer)
   uses a pre-trained VGG-16 model to compose an image in the style of another image (pre-trained weights:
-  [vgg16.ot](https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/vgg16.ot)).
+  [vgg16.ot](https://github.com/LaurentMazare/tch-rs/releases/download/mw/vgg16.ot)).
 * Some [ResNet examples on CIFAR-10](https://github.com/LaurentMazare/tch-rs/tree/master/examples/cifar).
 * A [tutorial](https://github.com/LaurentMazare/tch-rs/tree/master/examples/jit)
   showing how to deploy/run some Python trained models using
@@ -221,6 +226,8 @@ Further examples include:
 
 External material:
 * A [tutorial](http://vegapit.com/article/how-to-use-torch-in-rust-with-tch-rs) showing how to use Torch to compute option prices and greeks.
+* [tchrs-opencv-webcam-inference](https://github.com/metobom/tchrs-opencv-webcam-inference) uses `tch-rs` and `opencv` to run inference
+  on a webcam feed for some Python trained model based on mobilenet v3.
 
 ## License
 `tch-rs` is distributed under the terms of both the MIT license

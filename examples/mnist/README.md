@@ -7,7 +7,7 @@ files](http://yann.lecun.com/exdb/mnist/) in `data/`.
 
 The code can be found in `mnist_linear.ml`.
 
-We first load the MNIST data. This is done using the the MNIST helper module,
+We first load the MNIST data. This is done using the MNIST helper module,
 labels are returned as a vector of integer.  Train images and labels are used
 when training the model.  Test images and labels are used to estimate the
 validation error.
@@ -63,7 +63,7 @@ The code can be found in `mnist_nn.rs`, accuracy should reach ~96%.
 
 The code can be found in `mnist_conv.rs`, accuracy should reach ~99%.
 
-When buiding models with multiple weights and bias parameters we use
+When building models with multiple weights and bias parameters we use
 a variable store to keep track of these variables and let the optimizer
 know about them. The variable store is created in the first line of the
 following snippet, then the model is built using this variable store
@@ -77,7 +77,7 @@ creating the network.
     let opt = nn::Optimizer::adam(&vs, 1e-4, Default::default());
 ```
 
-Note that this will automatically run on a gpu when available.
+Note that this will automatically run on a GPU when available.
 For a convolutional model we cannot run on all the training images in
 a single step as this would requires lots of memory. Instead we
 run on mini-batches. An iterator makes it easy to loop over all

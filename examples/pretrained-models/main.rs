@@ -2,27 +2,29 @@
 // model to get the imagenet label for some image.
 //
 // The pre-trained weight files containing the pre-trained weights can be found here:
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/resnet18.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/resnet34.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/densenet121.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/vgg13.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/vgg16.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/vgg19.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/squeezenet1_0.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/squeezenet1_1.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/alexnet.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/inception-v3.ot
-// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/mobilenet-v2.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/resnet18.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/resnet34.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/densenet121.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/vgg13.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/vgg16.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/vgg19.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/squeezenet1_0.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/squeezenet1_1.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/alexnet.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/inception-v3.ot
+// https://github.com/LaurentMazare/tch-rs/releases/download/mw/mobilenet-v2.ot
 // https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/efficientnet-b0.ot
 // https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/efficientnet-b1.ot
 // https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/efficientnet-b2.ot
 // https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/efficientnet-b3.ot
 // https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/efficientnet-b4.ot
-extern crate tch;
+// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/convmixer1536_20.ot
+// https://github.com/LaurentMazare/ocaml-torch/releases/download/v0.1-unstable/convmixer1024_20.ot
 use anyhow::{bail, Result};
 use tch::nn::ModuleT;
 use tch::vision::{
-    alexnet, densenet, efficientnet, imagenet, inception, mobilenet, resnet, squeezenet, vgg,
+    alexnet, convmixer, densenet, efficientnet, imagenet, inception, mobilenet, resnet, squeezenet,
+    vgg,
 };
 
 pub fn main() -> Result<()> {
@@ -57,14 +59,15 @@ pub fn main() -> Result<()> {
         "efficientnet-b5.ot" => Box::new(efficientnet::b5(&vs.root(), imagenet::CLASS_COUNT)),
         "efficientnet-b6.ot" => Box::new(efficientnet::b6(&vs.root(), imagenet::CLASS_COUNT)),
         "efficientnet-b7.ot" => Box::new(efficientnet::b7(&vs.root(), imagenet::CLASS_COUNT)),
+        "convmixer1536_20.ot" => Box::new(convmixer::c1536_20(&vs.root(), imagenet::CLASS_COUNT)),
+        "convmixer1024_20.ot" => Box::new(convmixer::c1024_20(&vs.root(), imagenet::CLASS_COUNT)),
         _ => bail!("unknown model, use a weight file named e.g. resnet18.ot"),
     };
     vs.load(weights)?;
 
     // Apply the forward pass of the model to get the logits.
-    let output = net
-        .forward_t(&image.unsqueeze(0), /* train= */ false)
-        .softmax(-1, tch::Kind::Float); // Convert to probability.
+    let output =
+        net.forward_t(&image.unsqueeze(0), /* train= */ false).softmax(-1, tch::Kind::Float); // Convert to probability.
 
     // Print the top 5 categories for this image.
     for (probability, class) in imagenet::top(&output, 5).iter() {

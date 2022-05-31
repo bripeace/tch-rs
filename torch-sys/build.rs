@@ -9,30 +9,32 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use curl::easy::Easy;
+const TORCH_VERSION: &str = "1.11.0";
 
-const TORCH_VERSION: &str = "1.8.0";
-
+#[cfg(feature = "curl")]
 fn download<P: AsRef<Path>>(source_url: &str, target_file: P) -> anyhow::Result<()> {
+    use curl::easy::Easy;
+    use std::io::Write;
+
     let f = fs::File::create(&target_file)?;
     let mut writer = io::BufWriter::new(f);
     let mut easy = Easy::new();
-    easy.url(&source_url)?;
+    easy.url(source_url)?;
     easy.write_function(move |data| Ok(writer.write(data).unwrap()))?;
     easy.perform()?;
     let response_code = easy.response_code()?;
     if response_code == 200 {
         Ok(())
     } else {
-        Err(anyhow::anyhow!(
-            "Unexpected response code {} for {}",
-            response_code,
-            source_url
-        ))
+        Err(anyhow::anyhow!("Unexpected response code {} for {}", response_code, source_url))
     }
+}
+
+#[cfg(not(feature = "curl"))]
+fn download<P: AsRef<Path>>(_source_url: &str, _target_file: P) -> anyhow::Result<()> {
+    anyhow::bail!("cannot use download without the curl feature")
 }
 
 fn extract<P: AsRef<Path>>(filename: P, outpath: P) -> anyhow::Result<()> {
@@ -67,32 +69,42 @@ fn env_var_rerun(name: &str) -> Result<String, env::VarError> {
     env::var(name)
 }
 
+fn check_system_location() -> Option<PathBuf> {
+    let os = env::var("CARGO_CFG_TARGET_OS").expect("Unable to get TARGET_OS");
+
+    match os.as_str() {
+        "linux" => Path::new("/usr/lib/libtorch.so").exists().then(|| PathBuf::from("/usr")),
+        _ => None,
+    }
+}
+
 fn prepare_libtorch_dir() -> PathBuf {
     let os = env::var("CARGO_CFG_TARGET_OS").expect("Unable to get TARGET_OS");
 
     let device = match env_var_rerun("TORCH_CUDA_VERSION") {
         Ok(cuda_env) => match os.as_str() {
-            "linux" | "windows" => cuda_env
-                .trim()
-                .to_lowercase()
-                .trim_start_matches("cu")
-                .split('.')
-                .take(2)
-                .fold("cu".to_string(), |mut acc, curr| {
-                    acc += curr;
-                    acc
-                }),
+            "linux" | "windows" => {
+                cuda_env.trim().to_lowercase().trim_start_matches("cu").split('.').take(2).fold(
+                    "cu".to_owned(),
+                    |mut acc, curr| {
+                        acc += curr;
+                        acc
+                    },
+                )
+            }
             os_str => panic!(
                 "CUDA was specified with `TORCH_CUDA_VERSION`, but pre-built \
                  binaries with CUDA are only available for Linux and Windows, not: {}.",
                 os_str
             ),
         },
-        Err(_) => "cpu".to_string(),
+        Err(_) => "cpu".to_owned(),
     };
 
     if let Ok(libtorch) = env_var_rerun("LIBTORCH") {
         PathBuf::from(libtorch)
+    } else if let Some(pathbuf) = check_system_location() {
+        pathbuf
     } else {
         let libtorch_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("libtorch");
         if !libtorch_dir.exists() {
@@ -102,9 +114,8 @@ fn prepare_libtorch_dir() -> PathBuf {
                     "https://download.pytorch.org/libtorch/{}/libtorch-cxx11-abi-shared-with-deps-{}{}.zip",
                     device, TORCH_VERSION, match device.as_ref() {
                         "cpu" => "%2Bcpu",
-                        "cu92" => "%2Bcu92",
-                        "cu101" => "%2Bcu101",
-                        "cu110" => "%2Bcu110",
+                        "cu102" => "%2Bcu102",
+                        "cu113" => "%2Bcu113",
                         _ => ""
                     }
                 ),
@@ -116,9 +127,8 @@ fn prepare_libtorch_dir() -> PathBuf {
                     "https://download.pytorch.org/libtorch/{}/libtorch-win-shared-with-deps-{}{}.zip",
                     device, TORCH_VERSION, match device.as_ref() {
                         "cpu" => "%2Bcpu",
-                        "cu92" => "%2Bcu92",
-                        "cu101" => "%2Bcu101",
-                        "cu110" => "%2Bcu110",
+                        "cu102" => "%2Bcu102",
+                        "cu113" => "%2Bcu113",
                         _ => ""
                     }),
                 _ => panic!("Unsupported OS"),
@@ -145,17 +155,14 @@ fn make<P: AsRef<Path>>(libtorch: P) {
     match os.as_str() {
         "linux" | "macos" => {
             let libtorch_cxx11_abi =
-                env_var_rerun("LIBTORCH_CXX11_ABI").unwrap_or_else(|_| "1".to_string());
+                env_var_rerun("LIBTORCH_CXX11_ABI").unwrap_or_else(|_| "1".to_owned());
             cc::Build::new()
                 .cpp(true)
                 .pic(true)
                 .warnings(false)
                 .include(libtorch.as_ref().join("include"))
                 .include(libtorch.as_ref().join("include/torch/csrc/api/include"))
-                .flag(&format!(
-                    "-Wl,-rpath={}",
-                    libtorch.as_ref().join("lib").display()
-                ))
+                .flag(&format!("-Wl,-rpath={}", libtorch.as_ref().join("lib").display()))
                 .flag("-std=c++14")
                 .flag(&format!("-D_GLIBCXX_USE_CXX11_ABI={}", libtorch_cxx11_abi))
                 .file("libtch/torch_api.cpp")
@@ -189,10 +196,7 @@ fn main() {
             || libtorch.join("lib").join("torch_cuda_cpp.dll").exists();
         let use_hip = libtorch.join("lib").join("libtorch_hip.so").exists()
             || libtorch.join("lib").join("torch_hip.dll").exists();
-        println!(
-            "cargo:rustc-link-search=native={}",
-            libtorch.join("lib").display()
-        );
+        println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());
 
         make(&libtorch);
 

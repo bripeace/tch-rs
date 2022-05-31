@@ -1,4 +1,6 @@
-extern crate tch;
+// This example is useful to check for memory leaks.
+// A large number of tensors are created either on the cpu or on the gpu and one
+// can monitor the main memory usage or the gpu memory at the same time.
 use tch::Tensor;
 
 fn main() {
